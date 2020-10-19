@@ -8,9 +8,9 @@ function replaceContent(range, node) {
     range.setStartBefore(node);
     range.setEndAfter(node);
 }
+
 export class Component {
     constructor() {
-        this._root = null;
         this.children = [];
         this.props = Object.create(null);
         this._range = null;
@@ -27,7 +27,7 @@ export class Component {
     [RENDER_TO_DOM](range) {
         this._range = range;
         this._vdom = this.vdom;
-        this.render()[RENDER_TO_DOM](range);
+        this._vdom[RENDER_TO_DOM](range);
     }
     update() {
         let isSameNode = (oldNode, newNode) => {
@@ -52,7 +52,7 @@ export class Component {
             let newChildren = newNode.vchildren;
             let oldChildren = oldNode.vchildren;
 
-            if(!oldChildren) return;
+            if(!oldChildren || !newChildren.length) return;
             let tailRange = oldChildren[oldChildren.length -1]._range;
             for(let i = 0; i < newChildren.length; i++) {
                 let oldChild = oldChildren[i];
@@ -66,28 +66,27 @@ export class Component {
                     newChild[RENDER_TO_DOM](range);
                     tailRange = range;
                 }
-                
             }
         }
         let vdom = this.vdom;
-        updateDom(this._vdom, this.vdom);
+        updateNode(this._vdom, vdom);
         this._vdom = vdom;
     }
-    rerender() {
-        let oldRange = this._range;
+    // rerender() {
+    //     let oldRange = this._range;
 
-        let range = document.createRange();
-        range.setStart(oldRange.startContainer, oldRange.startOffset);
-        range.setEnd(oldRange.startContainer, oldRange.startOffset);
-        this[RENDER_TO_DOM](range);
+    //     let range = document.createRange();
+    //     range.setStart(oldRange.startContainer, oldRange.startOffset);
+    //     range.setEnd(oldRange.startContainer, oldRange.startOffset);
+    //     this[RENDER_TO_DOM](range);
 
-        oldRange.setStart(range.endContainer, range.endOffset);
-        oldRange.deleteContents()
-    }
+    //     oldRange.setStart(range.endContainer, range.endOffset);
+    //     oldRange.deleteContents()
+    // }
     setState(newState) {
         if(this.state === null || typeof this.state !== 'object') {
             this.state = newState;
-            this.rerender();
+            this.update();
             return;
         }
         let combime = (oldState, newState) => {
@@ -100,7 +99,7 @@ export class Component {
             }
         }
         combime(this.state, newState);
-        this.rerender();
+        this.update();
     }
 }
 
@@ -109,14 +108,12 @@ class ElementWrapper extends Component {
         super(type);
         this.type = type;
         this._range = null;
-        this.root = document.createElement(type);
     }
     get vdom() {
+        this.vchildren = this.children.map(child => child.vdom);
         return this;
     }
-    get vchildren() {
-        return this.children.map(child => child.vdom);
-    }
+    
     [RENDER_TO_DOM](range) {
         this._range = range;
 
@@ -132,12 +129,16 @@ class ElementWrapper extends Component {
                 root.setAttribute(name, value);
             }
         }
-        for(let child of this.children) {
+        if(!this.vchildren)
+            this.vchildren = this.children.map(child => child.vdom);
+            
+        for(let child of this.vchildren) {
             let childRange = document.createRange();
             childRange.setStart(root, root.childNodes.length);
             childRange.setEnd(root, root.childNodes.length);
             child[RENDER_TO_DOM](childRange);
         }
+        
         replaceContent(range, root);
     }
 }
